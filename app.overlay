@@ -11,6 +11,7 @@
 	};
 };
 
+/* Zephyr Shell console */
 &usart2 {
 	status = "okay";
 	pinctrl-0 = <&usart2_tx_pd5 &usart2_rx_pd6>;
@@ -18,6 +19,20 @@
 	current-speed = <115200>;
 };
 
+/* Modbus RTU interface */
+&usart6 {
+	status = "okay";
+	pinctrl-0 = <&usart6_tx_pc6 &usart6_rx_pc7>;
+	pinctrl-names = "default";
+	current-speed = <4800>;
+	
+	modbus0 {
+		compatible = "zephyr,modbus-serial";
+		status = "okay";
+	};
+};
+
+/* DM-STF4BB ethernet */
 &mac {
 	status = "okay";
 	pinctrl-0 = <&eth_rxd0_pc4
