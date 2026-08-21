@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(modbus-replacer-stm32)
 
-target_sources(app PRIVATE src/main.c)
+target_sources(app PRIVATE 
+	src/main.c
+	src/web.c
+)
 
 set(gen_dir ${ZEPHYR_BINARY_DIR}/include/generated/)
 
@@ -13,6 +16,7 @@ zephyr_linker_section(
 )
 foreach(web_resource
   index.html
+  main.js
 )
   generate_inc_file_for_target(app
     src/web/${web_resource}

@@ -2,10 +2,10 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/modbus/modbus.h>
-#include <zephyr/net/http/server.h>
-#include <zephyr/net/http/service.h>
 
-LOG_MODULE_REGISTER(mb_replacer, LOG_LEVEL_DBG);
+#include "web.h"
+
+LOG_MODULE_REGISTER(mb_replacer_main, LOG_LEVEL_DBG);
 
 // LEDs thread define for debug blink
 K_THREAD_STACK_DEFINE(led_thread_stack, 512);
@@ -46,43 +46,6 @@ static int init_mb_rtu_iface(void) {
 	
 	return modbus_init_client(mb_rtu_iface, mb_rtu_iface_param);
 }
-
-// HTTP server defines start
-static uint8_t index_html_gz[] = {
-#include "index.html.gz.inc"
-};
-
-static struct http_resource_detail_static http_index_gz_resource_detail = {
-	.common = {
-		.type = HTTP_RESOURCE_TYPE_STATIC,
-		.bitmask_of_supported_http_methods = BIT(HTTP_GET),
-		.content_encoding = "gzip",
-		.content_type = "text/html",
-	},
-	.static_data = index_html_gz,
-	.static_data_len = sizeof(index_html_gz),
-};
-
-static uint16_t http_service_port = 80;
-
-HTTP_SERVICE_DEFINE(
-	modbus_replacer_http_service,
-	NULL,
-	&http_service_port,
-	CONFIG_HTTP_SERVER_MAX_CLIENTS,
-	10,
-	NULL,
-	NULL,
-	NULL
-);
-
-HTTP_RESOURCE_DEFINE(
-	http_index_gz_resource,
-	modbus_replacer_http_service,
-	"/",
-	&http_index_gz_resource_detail
-);
-// HTTP server defines end
 
 // LEDs thread for debug blink
 void led_blink_thread(void *p1, void *p2, void *p3)
@@ -155,8 +118,6 @@ int main(void)
 			mb_regs_buffer,
 			ARRAY_SIZE(mb_regs_buffer)
 		);
-
-		LOG_DBG("MB ret code: %d", ret);
 		
 		if (!ret) {
 			for (int i = 0; i < 7; i++) {
@@ -165,6 +126,23 @@ int main(void)
 		} else {
 			LOG_ERR("MB Transceive error. Code: %d", ret);
 		}
+		
+		printk("\
+			Humidity:       %d.%d %\n\
+			Temperature:    %d.%d °C\n\
+			EC:             %d uS/cm\n\
+			pH:             %d.%d\n\
+			Nitrogen (N):   %d mg/kg\n\
+			Phosphorus (P): %d mg/kg\n\
+			Potassium (K):  %d mg/kg\n",
+			mb_regs_buffer[0] / 10, mb_regs_buffer[0] % 10,
+			mb_regs_buffer[1] / 10, mb_regs_buffer[1] % 10,
+			mb_regs_buffer[2],
+			mb_regs_buffer[3] / 10, mb_regs_buffer[3] % 10,
+			mb_regs_buffer[4],
+			mb_regs_buffer[5],
+			mb_regs_buffer[6]
+			);
 		
 		k_msleep(10000);
 
