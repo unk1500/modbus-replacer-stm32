@@ -108,45 +108,45 @@ int main(void)
 	// HTTP Server init call
 	http_server_start();
 	
-	while (1) {
+	// while (1) {
 
-		// Modbus RTU soil sensor regs read cycle
-		ret = modbus_read_holding_regs(
-			mb_rtu_iface,
-			0x01,
-			0x00,
-			mb_regs_buffer,
-			ARRAY_SIZE(mb_regs_buffer)
-		);
+	// 	// Modbus RTU soil sensor regs read cycle
+	// 	ret = modbus_read_holding_regs(
+	// 		mb_rtu_iface,
+	// 		0x01,
+	// 		0x00,
+	// 		mb_regs_buffer,
+	// 		ARRAY_SIZE(mb_regs_buffer)
+	// 	);
 		
-		if (!ret) {
-			for (int i = 0; i < 7; i++) {
-				LOG_INF("Reg %d: 0x%X",i , mb_regs_buffer[i]);
-			}
-		} else {
-			LOG_ERR("MB Transceive error. Code: %d", ret);
-		}
+	// 	if (!ret) {
+	// 		for (int i = 0; i < 7; i++) {
+	// 			LOG_INF("Reg %d: 0x%X",i , mb_regs_buffer[i]);
+	// 		}
+	// 	} else {
+	// 		LOG_ERR("MB Transceive error. Code: %d", ret);
+	// 	}
 		
-		printk("\
-			Humidity:       %d.%d %\n\
-			Temperature:    %d.%d °C\n\
-			EC:             %d uS/cm\n\
-			pH:             %d.%d\n\
-			Nitrogen (N):   %d mg/kg\n\
-			Phosphorus (P): %d mg/kg\n\
-			Potassium (K):  %d mg/kg\n",
-			mb_regs_buffer[0] / 10, mb_regs_buffer[0] % 10,
-			mb_regs_buffer[1] / 10, mb_regs_buffer[1] % 10,
-			mb_regs_buffer[2],
-			mb_regs_buffer[3] / 10, mb_regs_buffer[3] % 10,
-			mb_regs_buffer[4],
-			mb_regs_buffer[5],
-			mb_regs_buffer[6]
-			);
+	// 	printk("\
+	// 		Humidity:       %d.%d %\n\
+	// 		Temperature:    %d.%d °C\n\
+	// 		EC:             %d uS/cm\n\
+	// 		pH:             %d.%d\n\
+	// 		Nitrogen (N):   %d mg/kg\n\
+	// 		Phosphorus (P): %d mg/kg\n\
+	// 		Potassium (K):  %d mg/kg\n",
+	// 		mb_regs_buffer[0] / 10, mb_regs_buffer[0] % 10,
+	// 		mb_regs_buffer[1] / 10, mb_regs_buffer[1] % 10,
+	// 		mb_regs_buffer[2],
+	// 		mb_regs_buffer[3] / 10, mb_regs_buffer[3] % 10,
+	// 		mb_regs_buffer[4],
+	// 		mb_regs_buffer[5],
+	// 		mb_regs_buffer[6]
+	// 		);
 		
-		k_msleep(10000);
+	// 	k_msleep(10000);
 
-	}
+	// }
 
 	return 0;
 }

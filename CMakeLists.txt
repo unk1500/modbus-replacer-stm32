@@ -17,6 +17,7 @@ zephyr_linker_section(
 foreach(web_resource
   index.html
   main.js
+  style.css
 )
   generate_inc_file_for_target(app
     src/web/${web_resource}

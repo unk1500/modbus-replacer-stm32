@@ -13,6 +13,10 @@ static uint8_t main_js_gz[] = {
 #include "main.js.gz.inc"
 };
 
+static uint8_t style_css_gz[] = {
+#include "style.css.gz.inc"
+};
+
 static struct http_resource_detail_static http_index_gz_resource_detail = {
 	.common = {
 		.type = HTTP_RESOURCE_TYPE_STATIC,
@@ -35,6 +39,16 @@ static struct http_resource_detail_static main_js_gz_resource_detail = {
 	.static_data_len = sizeof(main_js_gz),
 };
 
+static struct http_resource_detail_static style_css_gz_resource_detail = {
+	.common = {
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.content_encoding = "gzip",
+			.content_type = "text/css",
+		},
+	.static_data = style_css_gz,
+	.static_data_len = sizeof(style_css_gz),
+};
 
 static int uptime_handler(
 	struct http_client_ctx *client, 
@@ -47,7 +61,7 @@ static int uptime_handler(
 	int ret;
 	static uint8_t uptime_buf[sizeof(STRINGIFY(INT64_MAX))];
 
-	LOG_DBG("Uptime handler status %d", status);
+	// LOG_DBG("Uptime handler status %d", status);
 
 	/* A payload is not expected with the GET request. Ignore any data and wait until
 	 * final callback before sending response
@@ -103,6 +117,12 @@ HTTP_RESOURCE_DEFINE(
 	&main_js_gz_resource_detail
 );
 
+HTTP_RESOURCE_DEFINE(
+	style_css_gz_resource,
+	modbus_replacer_http_service,
+	"/style.css",
+	&style_css_gz_resource_detail
+);
 
 HTTP_RESOURCE_DEFINE(
 	uptime_resource, 
