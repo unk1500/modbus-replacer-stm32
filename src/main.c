@@ -3,6 +3,21 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/modbus/modbus.h>
 
+// New MODBUS TCP Includes
+#include <zephyr/net/socket.h>
+
+
+// MODBUS TCP Includes
+// #include <zephyr/sys/util.h>
+
+// #include <zephyr/posix/netinet/in.h>
+// #include <zephyr/posix/sys/socket.h>
+// #include <zephyr/posix/arpa/inet.h>
+// #include <zephyr/posix/unistd.h>
+// #include <zephyr/posix/poll.h>
+// #include <zephyr/posix/netdb.h>
+
+
 #include "web.h"
 
 LOG_MODULE_REGISTER(mb_replacer_main, LOG_LEVEL_DBG);
@@ -20,6 +35,8 @@ static const struct gpio_dt_spec leds[] = {
 };
 const size_t leds_count = ARRAY_SIZE(leds);
 
+// Modbus TCP ADU
+static struct modbus_adu tmp_adu;
 // Modbus RTU struct
 static int mb_rtu_iface;
 
@@ -32,6 +49,7 @@ const static struct modbus_iface_param mb_rtu_iface_param = {
 	},
 };
 
+// Modbus RTU interface device tree
 #define MODBUS_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zephyr_modbus_serial)
 
 // Modbus RTU interface init
@@ -45,6 +63,53 @@ static int init_mb_rtu_iface(void) {
 	}
 	
 	return modbus_init_client(mb_rtu_iface, mb_rtu_iface_param);
+}
+
+// Modbus TCP reply
+static int modbus_tcp_reply(int client, struct modbus_adu *adu)
+{
+	uint8_t header[MODBUS_MBAP_AND_FC_LENGTH];
+
+	modbus_raw_put_header(adu, header);
+	if (zsock_send(client, header, sizeof(header), 0) < 0) {
+		return -errno;
+	}
+
+	if (zsock_send(client, adu->data, adu->length, 0) < 0) {
+		return -errno;
+	}
+
+	return 0;
+}
+
+// Modbus TCP receive data
+static int modbus_tcp_connection(int client)
+{
+	uint8_t header[MODBUS_MBAP_AND_FC_LENGTH];
+	int ret;
+	int data_len;
+
+	ret = zsock_recv(client, header, sizeof(header), MSG_WAITALL);
+	if (ret <= 0) {
+		return ret == 0 ? -ENOTCONN : -errno;
+	}
+
+	LOG_HEXDUMP_DBG(header, sizeof(header), "h:>");
+	modbus_raw_get_header(&tmp_adu, header);
+	data_len = tmp_adu.length;
+
+	ret = zsock_recv(client, tmp_adu.data, data_len, MSG_WAITALL);
+	if (ret <= 0) {
+		return ret == 0 ? -ENOTCONN : -errno;
+	}
+
+	LOG_HEXDUMP_DBG(tmp_adu.data, tmp_adu.length, "d:>");
+	ret = modbus_raw_backend_txn(mb_rtu_iface, &tmp_adu);
+	if (ret == -ENOTSUP || ret == -ENODEV) {
+		LOG_WRN("Modbus RTU iface error: %d", ret);
+	}
+
+	return modbus_tcp_reply(client, &tmp_adu);
 }
 
 // LEDs thread for debug blink
@@ -83,9 +148,9 @@ int main(void)
 		led_blink_thread, NULL, NULL, NULL, 7, 0, K_NO_WAIT
 	);
 
-	// MODBUS RTU intenface init call
+	// MODBUS RTU interface init call
 	if (init_mb_rtu_iface()) {
-		LOG_ERR("Modbus iface initialization failed");
+		LOG_ERR("Modbus RTU iface initialization failed");
 		return 0;
 	}
 
@@ -102,51 +167,105 @@ int main(void)
 		}
 	}
 
+	int modbus_server;
+	struct sockaddr_in bind_addr;
+	static int connection_counter;
+
+	modbus_server = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+	if (modbus_server < 0) {
+		LOG_ERR("Failed to open socket (err: %d)", errno);
+		return 0;
+	}
+
+	bind_addr.sin_family = AF_INET;
+	bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	// !!! This is MODBUS Port! Replace it and set default value!
+	bind_addr.sin_port = htons(502);
+
+	if (zsock_bind(modbus_server, (struct sockaddr *)&bind_addr, sizeof(bind_addr)) < 0) {
+		LOG_ERR("Failed to bind address (err: %d)", errno);
+		return 0;
+	}
+
+	// !!! Replace backlog=5 to define
+	if (zsock_listen(modbus_server, 5) < 0) {
+		LOG_ERR("Failed to listen socket (err: %d)", errno);
+		return 0;
+	}
+
+	// !!! Here is MODBUS Port! Replace it and set default value!
+	LOG_INF("Started MODBUS TCP gateway example on port %d", 502);
+
 	// MODBUS RTU registers buffer
-	uint16_t mb_regs_buffer[7];
+	// uint16_t mb_regs_buffer[7];
 
 	// HTTP Server init call
 	http_server_start();
 	
-	// while (1) {
+	while (1) {
 
-	// 	// Modbus RTU soil sensor regs read cycle
-	// 	ret = modbus_read_holding_regs(
-	// 		mb_rtu_iface,
-	// 		0x01,
-	// 		0x00,
-	// 		mb_regs_buffer,
-	// 		ARRAY_SIZE(mb_regs_buffer)
-	// 	);
-		
-	// 	if (!ret) {
-	// 		for (int i = 0; i < 7; i++) {
-	// 			LOG_INF("Reg %d: 0x%X",i , mb_regs_buffer[i]);
-	// 		}
-	// 	} else {
-	// 		LOG_ERR("MB Transceive error. Code: %d", ret);
-	// 	}
-		
-	// 	printk("\
-	// 		Humidity:       %d.%d %\n\
-	// 		Temperature:    %d.%d °C\n\
-	// 		EC:             %d uS/cm\n\
-	// 		pH:             %d.%d\n\
-	// 		Nitrogen (N):   %d mg/kg\n\
-	// 		Phosphorus (P): %d mg/kg\n\
-	// 		Potassium (K):  %d mg/kg\n",
-	// 		mb_regs_buffer[0] / 10, mb_regs_buffer[0] % 10,
-	// 		mb_regs_buffer[1] / 10, mb_regs_buffer[1] % 10,
-	// 		mb_regs_buffer[2],
-	// 		mb_regs_buffer[3] / 10, mb_regs_buffer[3] % 10,
-	// 		mb_regs_buffer[4],
-	// 		mb_regs_buffer[5],
-	// 		mb_regs_buffer[6]
-	// 		);
-		
-	// 	k_msleep(10000);
+		struct sockaddr_in client_addr;
+		socklen_t client_addr_len = sizeof(client_addr);
+		char addr_str[INET_ADDRSTRLEN];
+		int client;
+		int ret;
 
-	// }
+		client = zsock_accept(modbus_server, (struct sockaddr *)&client_addr, &client_addr_len);
+
+		if (client < 0) {
+			LOG_ERR("Failed to accept client (err: %d)", errno);
+			continue;
+		}
+
+		zsock_inet_ntop(client_addr.sin_family, &client_addr.sin_addr, addr_str, sizeof(addr_str));
+		LOG_INF("Connection #%d from %s", connection_counter++, addr_str);
+
+		do {
+			ret = modbus_tcp_connection(client);
+		} while (!ret);
+
+		zsock_close(client);
+		LOG_INF("Connection from %s closed, errno %d", addr_str, ret);
+
+
+		// // Modbus RTU soil sensor regs read cycle
+		// ret = modbus_read_holding_regs(
+		// 	mb_rtu_iface,
+		// 	0x01,
+		// 	0x00,
+		// 	mb_regs_buffer,
+		// 	ARRAY_SIZE(mb_regs_buffer)
+		// );
+		
+		// if (!ret) {
+		// 	for (int i = 0; i < 7; i++) {
+		// 		LOG_INF("Reg %d: 0x%X",i , mb_regs_buffer[i]);
+		// 	}
+		// } else {
+		// 	LOG_ERR("MB Transceive error. Code: %d", ret);
+		// }
+		
+		// printk("\
+		// 	Humidity:       %d.%d %\n\
+		// 	Temperature:    %d.%d °C\n\
+		// 	EC:             %d uS/cm\n\
+		// 	pH:             %d.%d\n\
+		// 	Nitrogen (N):   %d mg/kg\n\
+		// 	Phosphorus (P): %d mg/kg\n\
+		// 	Potassium (K):  %d mg/kg\n",
+		// 	mb_regs_buffer[0] / 10, mb_regs_buffer[0] % 10,
+		// 	mb_regs_buffer[1] / 10, mb_regs_buffer[1] % 10,
+		// 	mb_regs_buffer[2],
+		// 	mb_regs_buffer[3] / 10, mb_regs_buffer[3] % 10,
+		// 	mb_regs_buffer[4],
+		// 	mb_regs_buffer[5],
+		// 	mb_regs_buffer[6]
+		// 	);
+		
+		// k_msleep(10000);
+
+	}
 
 	return 0;
 }
